@@ -158,6 +158,7 @@ function parseJsonFromModel(content) {
 }
 
 function arrayBufferToBase64(buffer) {
+  if (typeof Buffer !== "undefined") return Buffer.from(buffer).toString("base64");
   const bytes = new Uint8Array(buffer);
   let binary = "";
   const chunkSize = 0x8000;
