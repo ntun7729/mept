@@ -1,4 +1,5 @@
 import { chatJson } from "./ai-client.js";
+import { logDebug, logInfo } from "./logger.js";
 
 export async function checkQuiz(quiz, responses) {
   const answerMap = Array.isArray(responses)
@@ -12,11 +13,13 @@ export async function checkQuiz(quiz, responses) {
     if (isObjective(question.type)) objective.push(checkObjective(question, userAnswer));
     else open.push({ question, userAnswer });
   }
+  logInfo("check.split", { quizId: quiz.id, objective: objective.length, openEnded: open.length });
 
   const openResults = open.length ? await checkOpenAnswers(open) : [];
   const results = [...objective, ...openResults].sort((a, b) => indexOf(quiz, a.questionId) - indexOf(quiz, b.questionId));
   const score = results.reduce((sum, item) => sum + item.score, 0);
   const maxScore = results.reduce((sum, item) => sum + item.maxScore, 0);
+  logInfo("check.complete", { quizId: quiz.id, score, maxScore, percent: maxScore ? Math.round((score / maxScore) * 100) : 0 });
   return { quizId: quiz.id, score, maxScore, percent: maxScore ? Math.round((score / maxScore) * 100) : 0, results };
 }
 
@@ -25,6 +28,7 @@ function checkObjective(question, userAnswer) {
   const correct = question.type === "ordering"
     ? orderValue(userAnswer) === orderValue(correctAnswer)
     : userAnswer.toLowerCase() === correctAnswer.toLowerCase();
+  logDebug("check.objective", { questionId: question.id, type: question.type, answered: Boolean(userAnswer), correct });
   return {
     questionId: question.id,
     type: question.type,
@@ -50,6 +54,7 @@ async function checkOpenAnswers(items) {
       userAnswer
     }))
   };
+  logInfo("check.open.request", { items: items.length });
   const data = await chatJson({
     messages: [
       { role: "system", content: "You are an English examiner. Return compact JSON." },
@@ -59,6 +64,7 @@ async function checkOpenAnswers(items) {
     maxTokens: 2500
   });
   const rows = Array.isArray(data?.results) ? data.results : [];
+  logInfo("check.open.response", { requested: items.length, returned: rows.length });
   return items.map(({ question, userAnswer }) => {
     const row = rows.find((item) => item.questionId === question.id) || {};
     const score = clamp(row.score, 0, 5);
