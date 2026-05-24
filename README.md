@@ -9,6 +9,7 @@ Features:
 - Check objective answers locally and writing/speaking answers with an AI provider.
 - Generate listening scripts and optionally create audio through a compatible speech endpoint.
 - Structured JSON logs for requests, AI calls, quiz generation, checking, and audio.
+- Local fallback generation, so the Generate button still returns questions if the AI provider fails.
 
 ## Run locally
 
@@ -21,7 +22,7 @@ Open `http://127.0.0.1:8787`.
 
 Keep provider keys in environment variables; never put them in browser code.
 
-Required provider variables:
+Provider variables:
 
 ```bash
 AI_API_KEY=your_key
@@ -29,6 +30,8 @@ AI_BASE_URL=https://integrate.api.nvidia.com/v1
 AI_MODEL=z-ai/glm-5.1
 PORT=8787
 ```
+
+If `AI_API_KEY` is missing or the provider fails, `/api/generate` returns local fallback MEPT questions instead of returning an empty quiz. The page displays a warning explaining why fallback mode was used.
 
 Optional audio variables:
 
@@ -69,6 +72,10 @@ Useful log events:
 - `http.request`
 - `quiz.generate.request`
 - `question.generate.start`
+- `question.generate.no_ai_key`
+- `question.generate.ai_failed`
+- `question.generate.fallback_ready`
+- `ai.chat.retry_without_json_mode`
 - `ai.chat.request`
 - `ai.chat.response`
 - `quiz.generate.success`
@@ -78,6 +85,16 @@ Useful log events:
 - `ai.audio.response`
 
 API keys, tokens, secrets, passwords, and authorization fields are redacted before logging.
+
+## Quick API test
+
+This should return questions even without an AI key because fallback mode is built in:
+
+```bash
+curl -s http://127.0.0.1:8787/api/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"section":"mixed","count":3,"difficulty":"normal","topic":"PPE","includeAudio":true}'
+```
 
 ## Check syntax
 
