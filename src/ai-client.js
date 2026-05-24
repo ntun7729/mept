@@ -1,11 +1,12 @@
+import { getEnv } from "./runtime-env.js";
 import { logDebug, logError, logInfo, logWarn } from "./logger.js";
 
 const DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
 export function getConfig({ requireKey = true } = {}) {
-  const apiKey = (process.env.AI_API_KEY || process.env.NVIDIA_API_KEY || "").trim();
-  const baseUrl = trimTrailingSlash(process.env.AI_BASE_URL || DEFAULT_BASE_URL);
-  const model = (process.env.AI_MODEL || "z-ai/glm-5.1").trim();
+  const apiKey = (getEnv("AI_API_KEY") || getEnv("NVIDIA_API_KEY") || "").trim();
+  const baseUrl = trimTrailingSlash(getEnv("AI_BASE_URL", DEFAULT_BASE_URL));
+  const model = getEnv("AI_MODEL", "z-ai/glm-5.1").trim();
   if (requireKey && !apiKey) throw new Error("Missing AI_API_KEY or NVIDIA_API_KEY in your environment");
   if (!isHttpUrl(baseUrl)) throw new Error("AI_BASE_URL must be an http or https URL");
   logDebug("ai.config.loaded", { baseUrl, model, hasApiKey: Boolean(apiKey) });
@@ -13,7 +14,7 @@ export function getConfig({ requireKey = true } = {}) {
 }
 
 export function hasAiKey() {
-  return Boolean((process.env.AI_API_KEY || process.env.NVIDIA_API_KEY || "").trim());
+  return Boolean((getEnv("AI_API_KEY") || getEnv("NVIDIA_API_KEY") || "").trim());
 }
 
 export function getChatCompletionsUrl(baseUrl) {
@@ -107,10 +108,10 @@ function isJsonModeCompatibilityError(message) {
 }
 
 export async function speechMp3({ text }) {
-  const apiKey = (process.env.AUDIO_API_KEY || process.env.AI_API_KEY || process.env.NVIDIA_API_KEY || "").trim();
-  const baseUrl = trimTrailingSlash(process.env.AUDIO_BASE_URL || process.env.AI_BASE_URL || DEFAULT_BASE_URL);
-  const model = (process.env.AUDIO_MODEL || "tts-1").trim();
-  const voice = (process.env.AUDIO_VOICE || "alloy").trim();
+  const apiKey = (getEnv("AUDIO_API_KEY") || getEnv("AI_API_KEY") || getEnv("NVIDIA_API_KEY") || "").trim();
+  const baseUrl = trimTrailingSlash(getEnv("AUDIO_BASE_URL", getEnv("AI_BASE_URL", DEFAULT_BASE_URL)));
+  const model = getEnv("AUDIO_MODEL", "tts-1").trim();
+  const voice = getEnv("AUDIO_VOICE", "alloy").trim();
   if (!apiKey) throw new Error("Missing audio API key");
   const url = getAudioSpeechUrl(baseUrl);
   const startedAt = Date.now();
