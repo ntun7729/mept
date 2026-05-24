@@ -5,6 +5,7 @@ import { MEPT_FORMAT } from "../../src/mept-format.js";
 import { setRuntimeEnv } from "../../src/runtime-env.js";
 
 const quizStore = new Map();
+const QUIZ_TTL_SECONDS = 60 * 60 * 6;
 
 export async function onRequest(context) {
   setRuntimeEnv({ ...context.env, NODE_ENV: context.env.NODE_ENV || "production" });
@@ -13,7 +14,7 @@ export async function onRequest(context) {
 
   try {
     if (context.request.method === "GET" && pathname === "health") {
-      return json({ ok: true, app: "mept-english-trainer", runtime: "cloudflare-pages" });
+      return json({ ok: true, app: "mept-english-trainer", runtime: "cloudflare-pages", kvEnabled: Boolean(context.env.MEPT_QUIZZES) });
     }
 
     if (context.request.method === "GET" && pathname === "format") {
@@ -28,8 +29,7 @@ export async function onRequest(context) {
     if (context.request.method === "POST" && (pathname === "generate" || pathname === "questions")) {
       const body = await readJson(context.request);
       const quiz = await generateQuiz(body);
-      quizStore.set(quiz.id, quiz);
-      trimQuizStore();
+      await saveQuiz(context.env, quiz);
       const publicResult = publicQuiz(quiz);
       return json({ quiz: publicResult, questions: publicResult.questions });
     }
@@ -37,14 +37,14 @@ export async function onRequest(context) {
     if (context.request.method === "POST" && pathname === "check") {
       const body = await readJson(context.request);
       const quizId = String(body.quizId || "").trim();
-      const quiz = quizStore.get(quizId);
+      const quiz = await loadQuiz(context.env, quizId);
       if (!quiz) return json({ error: "Quiz expired or not found. Generate a new quiz." }, 404);
       return json(await checkQuiz(quiz, body.responses || body.answers || {}));
     }
 
     if (context.request.method === "POST" && pathname === "audio") {
       const body = await readJson(context.request);
-      const quiz = quizStore.get(String(body.quizId || ""));
+      const quiz = await loadQuiz(context.env, String(body.quizId || ""));
       const question = quiz?.questions?.find((item) => item.id === String(body.questionId || ""));
       if (!question?.script) return json({ error: "Listening script not found for this question." }, 404);
       const audioBase64 = await speechMp3({ text: question.script });
@@ -55,6 +55,24 @@ export async function onRequest(context) {
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Unknown error" }, 400);
   }
+}
+
+async function saveQuiz(env, quiz) {
+  quizStore.set(quiz.id, quiz);
+  trimQuizStore();
+  if (env.MEPT_QUIZZES) {
+    await env.MEPT_QUIZZES.put(quiz.id, JSON.stringify(quiz), { expirationTtl: QUIZ_TTL_SECONDS });
+  }
+}
+
+async function loadQuiz(env, quizId) {
+  if (!quizId) return null;
+  const memoryQuiz = quizStore.get(quizId);
+  if (memoryQuiz) return memoryQuiz;
+  if (!env.MEPT_QUIZZES) return null;
+  const stored = await env.MEPT_QUIZZES.get(quizId, { type: "json" });
+  if (stored) quizStore.set(quizId, stored);
+  return stored || null;
 }
 
 async function readJson(request) {
