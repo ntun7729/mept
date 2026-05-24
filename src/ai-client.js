@@ -1,15 +1,19 @@
-import { logDebug, logError, logInfo } from "./logger.js";
+import { logDebug, logError, logInfo, logWarn } from "./logger.js";
 
 const DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
-export function getConfig() {
+export function getConfig({ requireKey = true } = {}) {
   const apiKey = (process.env.AI_API_KEY || process.env.NVIDIA_API_KEY || "").trim();
   const baseUrl = trimTrailingSlash(process.env.AI_BASE_URL || DEFAULT_BASE_URL);
   const model = (process.env.AI_MODEL || "z-ai/glm-5.1").trim();
-  if (!apiKey) throw new Error("Missing AI_API_KEY or NVIDIA_API_KEY in your environment");
+  if (requireKey && !apiKey) throw new Error("Missing AI_API_KEY or NVIDIA_API_KEY in your environment");
   if (!isHttpUrl(baseUrl)) throw new Error("AI_BASE_URL must be an http or https URL");
   logDebug("ai.config.loaded", { baseUrl, model, hasApiKey: Boolean(apiKey) });
   return { apiKey, baseUrl, model };
+}
+
+export function hasAiKey() {
+  return Boolean((process.env.AI_API_KEY || process.env.NVIDIA_API_KEY || "").trim());
 }
 
 export function getChatCompletionsUrl(baseUrl) {
@@ -50,39 +54,56 @@ export async function chatJson({ messages, temperature = 0.7, maxTokens = 4096, 
   const config = getConfig();
   const url = getChatCompletionsUrl(config.baseUrl);
   const selectedModel = model || config.model;
+  const first = await sendChatRequest({ config, url, selectedModel, messages, temperature, maxTokens, jsonMode: true });
+
+  if (!first.ok && isJsonModeCompatibilityError(first.message)) {
+    logWarn("ai.chat.retry_without_json_mode", { status: first.status, message: first.message.slice(0, 180) });
+    const second = await sendChatRequest({ config, url, selectedModel, messages, temperature, maxTokens, jsonMode: false });
+    if (!second.ok) throwLoggedChatError(second);
+    return parseChatContent(second.content);
+  }
+
+  if (!first.ok) throwLoggedChatError(first);
+  return parseChatContent(first.content);
+}
+
+async function sendChatRequest({ config, url, selectedModel, messages, temperature, maxTokens, jsonMode }) {
   const startedAt = Date.now();
-  logInfo("ai.chat.request", { url: redactUrl(url), model: selectedModel, messageCount: messages.length, temperature, maxTokens });
+  const payload = { model: selectedModel, messages, temperature, max_tokens: maxTokens };
+  if (jsonMode) payload.response_format = { type: "json_object" };
+
+  logInfo("ai.chat.request", { url: redactUrl(url), model: selectedModel, messageCount: messages.length, temperature, maxTokens, jsonMode });
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    },
-    body: JSON.stringify({
-      model: selectedModel,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-      response_format: { type: "json_object" }
-    })
+    headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload)
   });
   const text = await response.text();
   const data = safeJson(text);
-  logInfo("ai.chat.response", { status: response.status, durationMs: Date.now() - startedAt, bodyBytes: text.length });
+  logInfo("ai.chat.response", { status: response.status, durationMs: Date.now() - startedAt, bodyBytes: text.length, jsonMode });
+
   if (!response.ok) {
-    const message = data?.error?.message || text.slice(0, 400) || `AI request failed: ${response.status}`;
-    logError("ai.chat.error", { status: response.status, message });
-    throw new Error(message);
+    return { ok: false, status: response.status, message: data?.error?.message || text.slice(0, 500) || `AI request failed: ${response.status}` };
   }
+
   const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    logError("ai.chat.empty_response", { status: response.status });
-    throw new Error("AI provider returned an empty response");
-  }
+  if (typeof content !== "string" || !content.trim()) return { ok: false, status: response.status, message: "AI provider returned an empty response" };
+  return { ok: true, status: response.status, content };
+}
+
+function parseChatContent(content) {
   const parsed = parseJsonFromModel(content);
   logDebug("ai.chat.parsed", { topLevelKeys: Object.keys(parsed || {}) });
   return parsed;
+}
+
+function throwLoggedChatError(result) {
+  logError("ai.chat.error", { status: result.status, message: result.message });
+  throw new Error(result.message);
+}
+
+function isJsonModeCompatibilityError(message) {
+  return /response_format|json_object|json mode|schema|unsupported|unknown parameter|extra fields/i.test(String(message || ""));
 }
 
 export async function speechMp3({ text }) {
@@ -117,6 +138,12 @@ function parseJsonFromModel(content) {
   if (fenced) {
     const parsed = safeJson(fenced[1]);
     if (parsed) return parsed;
+  }
+  const arrayStart = content.indexOf("[");
+  const arrayEnd = content.lastIndexOf("]");
+  if (arrayStart >= 0 && arrayEnd > arrayStart) {
+    const parsed = safeJson(content.slice(arrayStart, arrayEnd + 1));
+    if (parsed) return { questions: parsed };
   }
   const start = content.indexOf("{");
   const end = content.lastIndexOf("}");
