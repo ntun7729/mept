@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { chatJson } from "./ai-client.js";
 import { MEPT_FORMAT, getSection, validSections } from "./mept-format.js";
+import { logDebug, logInfo } from "./logger.js";
 
 const QUESTION_TYPES = ["multiple_choice", "true_false", "true_false_doesnt_say", "writing", "speaking", "ordering", "listening_multiple_choice"];
 
@@ -10,6 +11,7 @@ export async function generateQuiz(input) {
   const difficulty = normalizeDifficulty(input.difficulty);
   const topic = cleanText(input.topic, 120) || "mixed maritime workplace English";
   const includeAudio = Boolean(input.includeAudio || section === "listening");
+  logInfo("question.generate.start", { section, count, difficulty, topic, includeAudio });
 
   const system = [
     "You generate MEPT-style English practice tests for new seafarers.",
@@ -47,16 +49,26 @@ export async function generateQuiz(input) {
     }
   };
 
+  logDebug("question.generate.prompt_ready", { systemChars: system.length, userChars: JSON.stringify(user).length });
   const quiz = await chatJson({
     messages: [{ role: "system", content: system }, { role: "user", content: JSON.stringify(user) }],
     temperature: 0.85,
     maxTokens: 6000
   });
 
-  return normalizeQuiz(quiz, { section, count });
+  const normalized = normalizeQuiz(quiz, { section, count });
+  logInfo("question.generate.normalized", {
+    quizId: normalized.id,
+    title: normalized.title,
+    section: normalized.section,
+    questions: normalized.questions.length,
+    types: normalized.questions.map((question) => question.type)
+  });
+  return normalized;
 }
 
 export function publicQuiz(fullQuiz) {
+  logDebug("question.public_quiz", { quizId: fullQuiz.id, questions: fullQuiz.questions.length, answersHidden: true });
   return {
     id: fullQuiz.id,
     title: fullQuiz.title,
