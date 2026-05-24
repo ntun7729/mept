@@ -1,6 +1,6 @@
 # MEPT English Trainer
 
-A Node.js web app for MEPT-style English practice.
+A Node.js and Cloudflare Pages web app for MEPT-style English practice.
 
 Features:
 
@@ -8,10 +8,11 @@ Features:
 - Render Google-Form-style answer choices.
 - Check objective answers locally and writing/speaking answers with an AI provider.
 - Generate listening scripts and optionally create audio through a compatible speech endpoint.
-- Structured JSON logs for requests, AI calls, quiz generation, checking, and audio.
+- Structured JSON logs for local debugging.
 - Local fallback generation, so the Generate button still returns questions if the AI provider fails.
+- Cloudflare Pages Functions support for deployment with Wrangler.
 
-## Run locally
+## Run locally with Node
 
 ```bash
 npm install
@@ -19,6 +20,50 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:8787`.
+
+## Run locally with Wrangler Pages
+
+```bash
+npm install
+npm run pages:dev
+```
+
+Open the local URL printed by Wrangler.
+
+## Deploy with Wrangler
+
+Login first:
+
+```bash
+npx wrangler login
+```
+
+Set secrets:
+
+```bash
+npx wrangler pages secret put AI_API_KEY --project-name=mept
+```
+
+Optional audio secrets:
+
+```bash
+npx wrangler pages secret put AUDIO_API_KEY --project-name=mept
+```
+
+Deploy:
+
+```bash
+npm run deploy
+```
+
+The app uses `wrangler.toml` for production defaults. Production logs are silent by default:
+
+```toml
+NODE_ENV = "production"
+LOG_LEVEL = "silent"
+```
+
+## Environment variables
 
 Keep provider keys in environment variables; never put them in browser code.
 
@@ -35,7 +80,7 @@ If `AI_API_KEY` is missing or the provider fails, `/api/generate` returns local 
 
 ## Audio model settings
 
-Yes, the audio model can be chosen separately from the chat model. Use these optional variables:
+The audio model can be chosen separately from the chat model. Use these optional variables:
 
 ```bash
 AUDIO_API_KEY=your_audio_key_or_same_key
@@ -55,19 +100,19 @@ AUDIO_VOICE=verse
 
 The chat question generator uses `AI_MODEL`. The listening audio endpoint uses `AUDIO_MODEL`, `AUDIO_BASE_URL`, `AUDIO_API_KEY`, and `AUDIO_VOICE`. If `AUDIO_API_KEY` is omitted, it falls back to `AI_API_KEY` or `NVIDIA_API_KEY`.
 
+## Cloudflare note about checking answers
+
+The Cloudflare Pages Function keeps generated quizzes in memory for simple deployment. This is enough for basic use and quick testing. For high traffic, a future improvement is to store quizzes in Cloudflare KV so check requests always find the quiz across isolates.
+
 ## UI behavior
 
 The Generate button is locked while questions are being generated. The Check answers button is locked while answers are being checked. This prevents duplicate overlapping requests from double-clicks or repeated presses.
 
 ## Logs
 
-Logs are enabled by default at `info` level. They are printed as JSON lines in the terminal where you run the server.
+Local logs are enabled by default at `info` level. Production logs are silent by default through `wrangler.toml`.
 
-```bash
-npm run dev
-```
-
-For more detail:
+For local detail:
 
 ```bash
 npm run dev:debug
