@@ -28,7 +28,7 @@ function checkObjective(question, userAnswer) {
   const correctAnswer = normalize(question.correctAnswer);
   const correct = question.type === "ordering"
     ? orderValue(userAnswer) === orderValue(correctAnswer)
-    : userAnswer.toLowerCase() === correctAnswer.toLowerCase();
+    : equivalentObjectiveAnswer(question, userAnswer, correctAnswer);
   logDebug("check.objective", { questionId: question.id, type: question.type, answered: Boolean(userAnswer), correct });
   return {
     questionId: question.id,
@@ -36,8 +36,8 @@ function checkObjective(question, userAnswer) {
     score: correct ? 1 : 0,
     maxScore: 1,
     correct,
-    userAnswer,
-    correctAnswer: question.correctAnswer,
+    userAnswer: displayAnswer(question, userAnswer),
+    correctAnswer: displayAnswer(question, correctAnswer),
     feedback: correct ? "Correct." : (question.answerExplanation || "Review this answer.")
   };
 }
@@ -110,6 +110,41 @@ function localOpenCheck({ question, userAnswer }) {
       : `Local check: your answer has ${words.length} word(s). Add clear details, correct grammar, and maritime vocabulary for a higher score.`,
     improvedAnswer: question.sampleAnswer || ""
   };
+}
+
+function equivalentObjectiveAnswer(question, userAnswer, correctAnswer) {
+  const userValues = answerCandidates(question, userAnswer);
+  const correctValues = answerCandidates(question, correctAnswer);
+  return userValues.some((value) => correctValues.includes(value));
+}
+
+function answerCandidates(question, answer) {
+  const raw = normalize(answer);
+  if (!raw) return [];
+  const candidates = new Set([simpleValue(raw)]);
+  const option = findOption(question, raw);
+  if (option) {
+    candidates.add(simpleValue(option.id));
+    candidates.add(simpleValue(option.text));
+  }
+  return [...candidates].filter(Boolean);
+}
+
+function findOption(question, answer) {
+  const raw = simpleValue(answer);
+  const options = Array.isArray(question.options) ? question.options : [];
+  return options.find((option) => simpleValue(option.id) === raw || simpleValue(option.text) === raw);
+}
+
+function displayAnswer(question, answer) {
+  const raw = normalize(answer);
+  const option = findOption(question, raw);
+  if (!option) return raw;
+  return `${option.id} (${option.text})`;
+}
+
+function simpleValue(value) {
+  return String(value || "").trim().toLowerCase().replace(/[.。]+$/g, "");
 }
 
 function isObjective(type) {
