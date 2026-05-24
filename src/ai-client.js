@@ -127,9 +127,10 @@ export async function speechMp3({ text }) {
     logError("ai.audio.error", { status: response.status, durationMs: Date.now() - startedAt, message });
     throw new Error(message);
   }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  logInfo("ai.audio.response", { status: response.status, durationMs: Date.now() - startedAt, audioBytes: buffer.length });
-  return buffer.toString("base64");
+  const arrayBuffer = await response.arrayBuffer();
+  const audioBase64 = arrayBufferToBase64(arrayBuffer);
+  logInfo("ai.audio.response", { status: response.status, durationMs: Date.now() - startedAt, audioBytes: arrayBuffer.byteLength });
+  return audioBase64;
 }
 
 function parseJsonFromModel(content) {
@@ -156,20 +157,16 @@ function parseJsonFromModel(content) {
   throw new Error("AI response was not valid JSON");
 }
 
-function safeJson(text) {
-  try { return JSON.parse(text); } catch { return null; }
-}
-function trimTrailingSlash(value) { return String(value || "").replace(/\/+$/, ""); }
-function isHttpUrl(value) {
-  try { const url = new URL(value); return url.protocol === "http:" || url.protocol === "https:"; } catch { return false; }
-}
-function redactUrl(url) {
-  try {
-    const parsed = new URL(url);
-    parsed.username = "";
-    parsed.password = "";
-    return parsed.toString();
-  } catch {
-    return "[invalid-url]";
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
+  return btoa(binary);
 }
+function safeJson(text) { try { return JSON.parse(text); } catch { return null; } }
+function trimTrailingSlash(value) { return String(value || "").replace(/\/+$/, ""); }
+function isHttpUrl(value) { try { const url = new URL(value); return url.protocol === "http:" || url.protocol === "https:"; } catch { return false; } }
+function redactUrl(url) { try { const parsed = new URL(url); parsed.username = ""; parsed.password = ""; return parsed.toString(); } catch { return "[invalid-url]"; } }
