@@ -1,3 +1,5 @@
+import { getEnv } from "./runtime-env.js";
+
 const LEVELS = { silent: 0, error: 1, warn: 2, info: 3, debug: 4 };
 
 export function logInfo(event, details = {}) {
@@ -36,9 +38,10 @@ function write(level, event, details) {
 }
 
 function currentLevel() {
-  const raw = String(process.env.LOG_LEVEL || process.env.DEBUG_LOGS || "info").toLowerCase().trim();
+  const defaultLevel = getEnv("NODE_ENV") === "production" ? "silent" : "info";
+  const raw = String(getEnv("LOG_LEVEL", getEnv("DEBUG_LOGS", defaultLevel))).toLowerCase().trim();
   if (raw === "true" || raw === "1" || raw === "yes") return LEVELS.debug;
-  return LEVELS[raw] ?? LEVELS.info;
+  return LEVELS[raw] ?? LEVELS[defaultLevel];
 }
 
 function redact(value) {
