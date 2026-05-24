@@ -168,11 +168,21 @@ function renderResult(data) {
   (data.results || []).forEach((item, index) => {
     const div = document.createElement("div");
     div.className = "result-item";
-    div.innerHTML = `<strong>Question ${index + 1}: ${item.correct ? "Correct" : "Review"}</strong><p>${esc(item.feedback || "")}</p>`;
-    if (item.correctAnswer) div.innerHTML += `<p><strong>Answer:</strong> ${esc(String(item.correctAnswer))}</p>`;
-    if (item.improvedAnswer) div.innerHTML += `<p><strong>Improved:</strong> ${esc(String(item.improvedAnswer))}</p>`;
+    const label = resultLabel(item);
+    div.innerHTML = `<strong>Question ${index + 1}: ${label}</strong><p>${esc(item.feedback || "")}</p>`;
+    if (item.userAnswer !== undefined && item.userAnswer !== null && String(item.userAnswer).trim()) {
+      div.innerHTML += `<p><strong>Your answer:</strong> ${esc(String(item.userAnswer))}</p>`;
+    }
+    if (item.correctAnswer) div.innerHTML += `<p><strong>Correct answer:</strong> ${esc(String(item.correctAnswer))}</p>`;
+    if (item.improvedAnswer) div.innerHTML += `<p><strong>Improved answer:</strong> ${esc(String(item.improvedAnswer))}</p>`;
     resultEl.append(div);
   });
+}
+
+function resultLabel(item) {
+  if (item.correct) return "Correct";
+  if (item.type === "writing" || item.type === "speaking") return "Needs review";
+  return "Incorrect";
 }
 
 function browserSpeechButton(question) {
