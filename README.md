@@ -33,7 +33,9 @@ PORT=8787
 
 If `AI_API_KEY` is missing or the provider fails, `/api/generate` returns local fallback MEPT questions instead of returning an empty quiz. The page displays a warning explaining why fallback mode was used.
 
-Optional audio variables:
+## Audio model settings
+
+Yes, the audio model can be chosen separately from the chat model. Use these optional variables:
 
 ```bash
 AUDIO_API_KEY=your_audio_key_or_same_key
@@ -41,6 +43,21 @@ AUDIO_BASE_URL=https://api.openai.com/v1
 AUDIO_MODEL=tts-1
 AUDIO_VOICE=alloy
 ```
+
+Examples:
+
+```bash
+AUDIO_MODEL=tts-1
+AUDIO_MODEL=gpt-4o-mini-tts
+AUDIO_VOICE=alloy
+AUDIO_VOICE=verse
+```
+
+The chat question generator uses `AI_MODEL`. The listening audio endpoint uses `AUDIO_MODEL`, `AUDIO_BASE_URL`, `AUDIO_API_KEY`, and `AUDIO_VOICE`. If `AUDIO_API_KEY` is omitted, it falls back to `AI_API_KEY` or `NVIDIA_API_KEY`.
+
+## UI behavior
+
+The Generate button is locked while questions are being generated. The Check answers button is locked while answers are being checked. This prevents duplicate overlapping requests from double-clicks or repeated presses.
 
 ## Logs
 
