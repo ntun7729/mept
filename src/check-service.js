@@ -36,6 +36,7 @@ function checkObjective(question, userAnswer) {
     score: correct ? 1 : 0,
     maxScore: 1,
     correct,
+    userAnswer,
     correctAnswer: question.correctAnswer,
     feedback: correct ? "Correct." : (question.answerExplanation || "Review this answer.")
   };
