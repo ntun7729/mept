@@ -80,7 +80,13 @@ function renderQuestion(question, index) {
     card.append(actions);
   }
   card.append(block("prompt", question.prompt || ""));
-  if (Array.isArray(question.options) && question.options.length && question.type !== "ordering") {
+  if (question.type === "ordering") {
+    if (Array.isArray(question.options) && question.options.length) card.append(renderOrderingOptions(question));
+    const textarea = document.createElement("textarea");
+    textarea.name = question.id;
+    textarea.placeholder = "Type the order, e.g. B, D, C, A";
+    card.append(textarea);
+  } else if (Array.isArray(question.options) && question.options.length) {
     const options = document.createElement("div");
     options.className = "options";
     question.options.forEach((option, optionIndex) => {
@@ -98,7 +104,7 @@ function renderQuestion(question, index) {
   } else {
     const textarea = document.createElement("textarea");
     textarea.name = question.id;
-    textarea.placeholder = question.type === "ordering" ? "Type the order, e.g. B, D, C, A" : "Type your answer here";
+    textarea.placeholder = "Type your answer here";
     card.append(textarea);
   }
   if (question.wordLimit) card.append(block("hint", `Word limit: ${question.wordLimit}`));
@@ -109,6 +115,23 @@ function renderQuestion(question, index) {
     card.append(details);
   }
   return card;
+}
+
+function renderOrderingOptions(question) {
+  const wrap = document.createElement("div");
+  wrap.className = "options ordering-options";
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = "Items to arrange:";
+  wrap.append(hint);
+  question.options.forEach((option, optionIndex) => {
+    const optionId = option.id || letter(optionIndex);
+    const item = document.createElement("div");
+    item.className = "option ordering-item";
+    item.textContent = `${optionId}. ${option.text || option}`;
+    wrap.append(item);
+  });
+  return wrap;
 }
 
 async function checkAnswers() {
