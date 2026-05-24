@@ -1,0 +1,12 @@
+name = "mept"
+compatibility_date = "2025-05-24"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "public"
+
+[vars]
+NODE_ENV = "production"
+LOG_LEVEL = "silent"
+AI_BASE_URL = "https://integrate.api.nvidia.com/v1"
+AI_MODEL = "z-ai/glm-5.1"
+AUDIO_MODEL = "tts-1"
+AUDIO_VOICE = "alloy"
