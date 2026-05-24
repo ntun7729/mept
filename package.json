@@ -8,9 +8,11 @@
     "dev": "node server.js",
     "dev:debug": "LOG_LEVEL=debug node server.js",
     "start": "node server.js",
-    "check": "node --check server.js && node --check src/ai-client.js && node --check src/question-service.js && node --check src/check-service.js && node --check src/mept-format.js && node --check src/logger.js && node --check src/runtime-env.js && node --check \"functions/api/[[path]].js\"",
+    "check": "node --check server.js && node --check src/ai-client.js && node --check src/question-service.js && node --check src/check-service.js && node --check src/mept-format.js && node --check src/logger.js && node --check src/runtime-env.js && node --check src/cloudflare-api.js && node --check worker.js && node --check \"functions/api/[[path]].js\"",
+    "worker:dev": "wrangler dev",
+    "deploy": "wrangler deploy",
     "pages:dev": "wrangler pages dev public",
-    "deploy": "wrangler pages deploy public --project-name=mept"
+    "pages:deploy": "wrangler pages deploy public --project-name=mept"
   },
   "dependencies": {
     "dotenv": "latest",
