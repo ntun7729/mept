@@ -64,7 +64,7 @@ async function requestAiQuiz(context) {
         passage: "optional reading passage",
         script: "optional listening script; required for listening questions",
         options: [{ id: "A", text: "option text" }],
-        correctAnswer: "objective answer only",
+        correctAnswer: "objective answer only, usually A/B/C/D or a comma-separated order",
         answerExplanation: "short explanation",
         rubric: ["open-ended grading rule"],
         wordLimit: "optional word limit",
@@ -116,21 +116,22 @@ function normalizeQuiz(quiz, context) {
 function normalizeQuestion(question, index) {
   if (!question || typeof question !== "object") throw new Error(`Question ${index + 1} is invalid`);
   const id = cleanText(question.id, 40) || `q${index + 1}`;
-  const type = QUESTION_TYPES.includes(question.type) ? question.type : "multiple_choice";
-  const prompt = cleanText(question.prompt, 1200);
+  const type = QUESTION_TYPES.includes(question.type) ? question.type : inferType(question);
+  const prompt = cleanText(question.prompt || question.question || question.text, 1200);
   if (!prompt) throw new Error(`Question ${index + 1} is missing a prompt`);
-  const options = Array.isArray(question.options) ? question.options.map(normalizeOption).filter(Boolean) : [];
+  const rawOptions = Array.isArray(question.options) ? question.options : Array.isArray(question.choices) ? question.choices : [];
+  const options = normalizeOptions(rawOptions, type);
   if (requiresOptions(type) && options.length < 2) throw new Error(`Question ${index + 1} needs at least two options`);
   return {
     id,
     section: validSections().includes(question.section) ? question.section : inferSection(type),
     type,
     prompt,
-    passage: cleanText(question.passage, 4000),
-    script: cleanText(question.script, 4000),
+    passage: cleanText(question.passage || question.readingPassage, 4000),
+    script: cleanText(question.script || question.audioScript || question.listeningScript, 4000),
     options,
-    correctAnswer: cleanText(question.correctAnswer, 300),
-    answerExplanation: cleanText(question.answerExplanation, 1000),
+    correctAnswer: normalizeCorrectAnswer(question.correctAnswer ?? question.answer ?? question.correct),
+    answerExplanation: cleanText(question.answerExplanation || question.explanation, 1000),
     rubric: Array.isArray(question.rubric) ? question.rubric.map((x) => cleanText(x, 160)).filter(Boolean) : [],
     wordLimit: cleanText(question.wordLimit, 60),
     sampleAnswer: cleanText(question.sampleAnswer, 1200)
@@ -169,11 +170,28 @@ function fallbackPool(topic, includeAudio) {
   return includeAudio ? questions : questions.map((question) => question.section === "listening" ? { ...question, script: "" } : question);
 }
 
-function makeId() {
-  return globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `quiz-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+function normalizeOptions(rawOptions, type) {
+  const options = rawOptions.map(normalizeOption).filter(Boolean);
+  if (options.length) return options;
+  if (type === "true_false") return [{ id: "A", text: "True" }, { id: "B", text: "False" }];
+  if (type === "true_false_doesnt_say") return [{ id: "A", text: "True" }, { id: "B", text: "False" }, { id: "C", text: "Doesn't say" }];
+  return [];
 }
+function normalizeOption(option, index) {
+  if (typeof option === "string") return { id: String.fromCharCode(65 + index), text: cleanText(option, 500) };
+  if (!option || typeof option !== "object") return null;
+  const id = cleanText(option.id || option.label || option.key || String.fromCharCode(65 + index), 10);
+  const text = cleanText(option.text || option.value || option.option || option.answer, 500);
+  return text ? { id, text } : null;
+}
+function normalizeCorrectAnswer(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean).join(",");
+  if (value && typeof value === "object") return cleanText(value.id || value.label || value.text || JSON.stringify(value), 300);
+  return cleanText(String(value ?? ""), 300);
+}
+function inferType(question) { if (question.script || question.audioScript || question.listeningScript) return "listening_multiple_choice"; if (question.rubric || question.wordLimit || question.sampleAnswer) return "writing"; return "multiple_choice"; }
+function makeId() { return globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `quiz-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 function selectFallback(pool, section, count) { const filtered = section === "mixed" ? pool : pool.filter((question) => question.section === section); const source = filtered.length ? filtered : pool; return Array.from({ length: count }, (_, index) => structuredClone(source[index % source.length])); }
-function normalizeOption(option, index) { if (!option || typeof option !== "object") return null; const id = cleanText(option.id, 10) || String.fromCharCode(65 + index); const text = cleanText(option.text, 500); return text ? { id, text } : null; }
 function inferSection(type) { if (type === "writing") return "writing"; if (type === "speaking") return "speaking"; if (type === "listening_multiple_choice") return "listening"; return "grammar"; }
 function requiresOptions(type) { return ["multiple_choice", "true_false", "true_false_doesnt_say", "ordering", "listening_multiple_choice"].includes(type); }
 function normalizeSection(value) { const section = String(value || "mixed").toLowerCase().trim(); return [...validSections(), "mixed"].includes(section) ? section : "mixed"; }
