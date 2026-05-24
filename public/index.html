@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MEPT English Trainer</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app">
+    <section class="hero">
+      <p class="eyebrow">MEPT Practice</p>
+      <h1>English Trainer</h1>
+      <p>Generate MEPT-style questions, answer them like a form, then check your score.</p>
+    </section>
+
+    <section class="panel controls">
+      <label>Section
+        <select id="section">
+          <option value="grammar">Grammar</option>
+          <option value="reading">Reading</option>
+          <option value="listening">Listening</option>
+          <option value="writing">Writing</option>
+          <option value="speaking">Speaking</option>
+          <option value="mixed">Mixed</option>
+        </select>
+      </label>
+      <label>Level
+        <select id="level">
+          <option value="elementary">Elementary</option>
+          <option value="pre-intermediate">Pre-intermediate</option>
+          <option value="intermediate" selected>Intermediate</option>
+          <option value="upper-intermediate">Upper-intermediate</option>
+        </select>
+      </label>
+      <label>Questions
+        <input id="count" type="number" min="1" max="10" value="5">
+      </label>
+      <button id="generate">Generate questions</button>
+    </section>
+
+    <section id="status" class="status"></section>
+    <form id="quiz" class="quiz"></form>
+    <section id="result" class="result"></section>
+  </main>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
