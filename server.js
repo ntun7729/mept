@@ -1,102 +1,95 @@
-import express from 'express';
-import dotenv from 'dotenv';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import "dotenv/config";
+import express from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { generateQuiz, publicQuiz } from "./src/question-service.js";
+import { checkQuiz } from "./src/check-service.js";
+import { listModels, speechMp3 } from "./src/ai-client.js";
+import { MEPT_FORMAT } from "./src/mept-format.js";
 
-dotenv.config();
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const app = express();
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PORT || 8787);
+const quizStore = new Map();
 
-app.use(express.json({ limit: '1mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.static(path.join(__dirname, "public")));
 
-function config() {
-  return {
-    apiKey: process.env.AI_API_KEY || process.env.NVIDIA_API_KEY || '',
-    baseUrl: (process.env.AI_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, ''),
-    model: process.env.AI_MODEL || 'z-ai/glm-5.1'
-  };
-}
+app.get("/api/health", (_request, response) => {
+  response.json({ ok: true, app: "mept-english-trainer" });
+});
 
-async function chatJson(messages, temperature = 0.7) {
-  const c = config();
-  if (!c.apiKey) throw new Error('Missing AI_API_KEY or NVIDIA_API_KEY');
-  const url = c.baseUrl.endsWith('/v1') ? `${c.baseUrl}/chat/completions` : `${c.baseUrl}/v1/chat/completions`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${c.apiKey}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json'
-    },
-    body: JSON.stringify({ model: c.model, messages, temperature })
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(text.slice(0, 500) || `Provider error ${response.status}`);
-  const data = JSON.parse(text);
-  return data.choices?.[0]?.message?.content || '';
-}
+app.get("/api/format", (_request, response) => {
+  response.json(MEPT_FORMAT);
+});
 
-function fallbackQuestion(section) {
-  return {
-    id: crypto.randomUUID(),
-    section,
-    type: 'multiple_choice',
-    title: 'Choose the correct answer.',
-    prompt: 'She _____ to school every day.',
-    options: ['go', 'goes', 'going', 'gone'],
-    correctAnswer: 'B',
-    answerExplanation: 'Use goes with third-person singular present simple.',
-    skill: 'Grammar: present simple'
-  };
-}
-
-function safeQuestion(q) {
-  const { correctAnswer, answerExplanation, sampleAnswer, ...safe } = q;
-  return safe;
-}
-
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
-
-app.post('/api/questions', async (req, res) => {
+app.get("/api/models", async (_request, response) => {
   try {
-    const section = String(req.body.section || 'grammar');
-    const count = Math.max(1, Math.min(10, Number(req.body.count || 5)));
-    const level = String(req.body.level || 'intermediate');
-    const prompt = `Create ${count} MEPT-style English practice questions for section ${section}, level ${level}. Return only JSON array. Each item: id, section, type, title, prompt, options, correctAnswer, answerExplanation, skill, audioScript if listening. Types allowed: multiple_choice, true_false, true_false_does_not_say, ordering, writing, speaking.`;
-    let questions = [];
-    try {
-      const raw = await chatJson([{ role: 'system', content: 'You create valid JSON only.' }, { role: 'user', content: prompt }]);
-      questions = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ''));
-    } catch {
-      questions = Array.from({ length: count }, () => fallbackQuestion(section));
+    const models = await listModels();
+    response.json({ models, defaultModel: process.env.AI_MODEL || "" });
+  } catch (error) {
+    response.status(400).json({ error: messageOf(error) });
+  }
+});
+
+app.post(["/api/generate", "/api/questions"], async (request, response) => {
+  try {
+    const quiz = await generateQuiz(request.body || {});
+    quizStore.set(quiz.id, quiz);
+    trimQuizStore();
+    response.json({ quiz: publicQuiz(quiz), questions: publicQuiz(quiz).questions });
+  } catch (error) {
+    response.status(400).json({ error: messageOf(error) });
+  }
+});
+
+app.post("/api/check", async (request, response) => {
+  try {
+    const quizId = String(request.body?.quizId || "").trim();
+    const quiz = quizStore.get(quizId);
+    if (!quiz) {
+      response.status(404).json({ error: "Quiz expired or not found. Generate a new quiz." });
+      return;
     }
-    globalThis.latestQuestions = questions;
-    res.json({ questions: questions.map(safeQuestion) });
+    response.json(await checkQuiz(quiz, request.body?.responses || request.body?.answers || {}));
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to generate questions' });
+    response.status(400).json({ error: messageOf(error) });
   }
 });
 
-app.post('/api/check', async (req, res) => {
+app.post("/api/audio", async (request, response) => {
   try {
-    const answers = Array.isArray(req.body.answers) ? req.body.answers : [];
-    const questions = globalThis.latestQuestions || [];
-    const results = answers.map((a) => {
-      const q = questions.find((item) => item.id === a.questionId);
-      if (!q) return { questionId: a.questionId, score: 0, feedback: 'Question not found.' };
-      const expected = String(q.correctAnswer || '').trim().toLowerCase();
-      const got = String(a.answer || '').trim().toLowerCase();
-      const correct = expected && got === expected;
-      return { questionId: q.id, score: correct ? 1 : 0, correctAnswer: q.correctAnswer, feedback: correct ? 'Correct.' : q.answerExplanation || 'Review the item.' };
-    });
-    const total = results.reduce((sum, r) => sum + r.score, 0);
-    res.json({ score: total, maxScore: results.length, results });
+    const quiz = quizStore.get(String(request.body?.quizId || ""));
+    const questionId = String(request.body?.questionId || "");
+    const question = quiz?.questions?.find((item) => item.id === questionId);
+    if (!question?.script) {
+      response.status(404).json({ error: "Listening script not found for this question." });
+      return;
+    }
+    const audioBase64 = await speechMp3({ text: question.script });
+    response.json({ mimeType: "audio/mpeg", audioBase64 });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to check answers' });
+    response.status(400).json({
+      error: messageOf(error),
+      fallback: "Use the browser Read aloud button, or configure an OpenAI-compatible speech endpoint."
+    });
   }
 });
 
-app.listen(PORT, () => console.log(`MEPT trainer running at http://127.0.0.1:${PORT}`));
+app.use((_request, response) => {
+  response.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+const port = Number(process.env.PORT || 8787);
+app.listen(port, () => {
+  console.log(`MEPT English Trainer running at http://127.0.0.1:${port}`);
+});
+
+function trimQuizStore() {
+  if (quizStore.size <= 100) return;
+  for (const key of [...quizStore.keys()].slice(0, quizStore.size - 100)) quizStore.delete(key);
+}
+
+function messageOf(error) {
+  return error instanceof Error ? error.message : "Unknown error";
+}
