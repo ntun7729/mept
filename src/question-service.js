@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { chatJson, hasAiKey } from "./ai-client.js";
 import { MEPT_FORMAT, getSection, validSections } from "./mept-format.js";
 import { logDebug, logError, logInfo, logWarn } from "./logger.js";
@@ -104,7 +103,7 @@ function normalizeQuiz(quiz, context) {
   const questions = Array.isArray(quiz.questions) ? quiz.questions : [];
   if (!questions.length) throw new Error("Generated quiz had no questions");
   return {
-    id: crypto.randomUUID(),
+    id: makeId(),
     title: cleanText(quiz.title, 120) || "MEPT Practice Quiz",
     section: normalizeSection(quiz.section || context.section),
     instructions: cleanText(quiz.instructions, 600) || "Answer all questions, then submit for checking.",
@@ -142,7 +141,7 @@ function fallbackQuiz(context, warning) {
   const pool = fallbackPool(context.topic, context.includeAudio);
   const selected = selectFallback(pool, context.section, context.count).map((question, index) => ({ ...question, id: `q${index + 1}` }));
   const quiz = {
-    id: crypto.randomUUID(),
+    id: makeId(),
     title: `${labelSection(context.section)} Practice Quiz`,
     section: context.section,
     instructions: "Answer all questions. Some questions are locally generated fallback items.",
@@ -170,12 +169,10 @@ function fallbackPool(topic, includeAudio) {
   return includeAudio ? questions : questions.map((question) => question.section === "listening" ? { ...question, script: "" } : question);
 }
 
-function selectFallback(pool, section, count) {
-  const filtered = section === "mixed" ? pool : pool.filter((question) => question.section === section);
-  const source = filtered.length ? filtered : pool;
-  return Array.from({ length: count }, (_, index) => structuredClone(source[index % source.length]));
+function makeId() {
+  return globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `quiz-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
-
+function selectFallback(pool, section, count) { const filtered = section === "mixed" ? pool : pool.filter((question) => question.section === section); const source = filtered.length ? filtered : pool; return Array.from({ length: count }, (_, index) => structuredClone(source[index % source.length])); }
 function normalizeOption(option, index) { if (!option || typeof option !== "object") return null; const id = cleanText(option.id, 10) || String.fromCharCode(65 + index); const text = cleanText(option.text, 500); return text ? { id, text } : null; }
 function inferSection(type) { if (type === "writing") return "writing"; if (type === "speaking") return "speaking"; if (type === "listening_multiple_choice") return "listening"; return "grammar"; }
 function requiresOptions(type) { return ["multiple_choice", "true_false", "true_false_doesnt_say", "ordering", "listening_multiple_choice"].includes(type); }
