@@ -1,17 +1,22 @@
-const state = { quiz: null };
+const state = { quiz: null, isGenerating: false, isChecking: false };
 const $ = (id) => document.getElementById(id);
 const quizEl = $("quiz");
 const statusEl = $("status");
 const resultEl = $("result");
+const generateButton = $("generate");
+let checkButton = null;
 
-$("generate").addEventListener("click", generateQuiz);
+generateButton.addEventListener("click", generateQuiz);
+quizEl.addEventListener("submit", (event) => event.preventDefault());
 
 async function generateQuiz() {
+  if (state.isGenerating || state.isChecking) return;
   const section = $("section").value;
+  setGenerating(true);
   setStatus("Generating MEPT-style questions...");
   resultEl.innerHTML = "";
   quizEl.innerHTML = "";
-  $("generate").disabled = true;
+  checkButton = null;
   try {
     const response = await fetch("/api/generate", {
       method: "POST",
@@ -32,7 +37,7 @@ async function generateQuiz() {
   } catch (error) {
     setStatus(error.message || "Something went wrong.");
   } finally {
-    $("generate").disabled = false;
+    setGenerating(false);
   }
 }
 
@@ -51,12 +56,13 @@ function renderQuiz() {
   state.quiz.questions.forEach((question, index) => quizEl.append(renderQuestion(question, index)));
   const row = document.createElement("div");
   row.className = "submit-row";
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = "Check answers";
-  button.addEventListener("click", checkAnswers);
-  row.append(button);
+  checkButton = document.createElement("button");
+  checkButton.type = "button";
+  checkButton.textContent = "Check answers";
+  checkButton.addEventListener("click", checkAnswers);
+  row.append(checkButton);
   quizEl.append(row);
+  updateBusyControls();
 }
 
 function renderQuestion(question, index) {
@@ -106,7 +112,8 @@ function renderQuestion(question, index) {
 }
 
 async function checkAnswers() {
-  if (!state.quiz) return;
+  if (!state.quiz || state.isGenerating || state.isChecking) return;
+  setChecking(true);
   setStatus("Checking answers...");
   const responses = {};
   for (const question of state.quiz.questions) responses[question.id] = getAnswer(question);
@@ -122,6 +129,30 @@ async function checkAnswers() {
     setStatus("Done.");
   } catch (error) {
     setStatus(error.message || "Could not check answers.");
+  } finally {
+    setChecking(false);
+  }
+}
+
+function setGenerating(value) {
+  state.isGenerating = value;
+  updateBusyControls();
+}
+
+function setChecking(value) {
+  state.isChecking = value;
+  updateBusyControls();
+}
+
+function updateBusyControls() {
+  generateButton.disabled = state.isGenerating || state.isChecking;
+  generateButton.textContent = state.isGenerating ? "Generating..." : "Generate questions";
+  if (checkButton) {
+    checkButton.disabled = state.isGenerating || state.isChecking;
+    checkButton.textContent = state.isChecking ? "Checking..." : "Check answers";
+  }
+  for (const field of quizEl.querySelectorAll("input, textarea")) {
+    field.disabled = state.isChecking;
   }
 }
 
@@ -166,6 +197,7 @@ function serverAudioButton(question) {
   button.className = "secondary";
   button.textContent = "Generate audio";
   button.addEventListener("click", async () => {
+    if (state.isGenerating || state.isChecking) return;
     button.disabled = true;
     button.textContent = "Generating audio...";
     try {
