@@ -1,17 +1,19 @@
 {
   "name": "mept-english-trainer",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
+  "description": "MEPT English trainer web app with OpenAI-compatible question generation, audio listening practice, and answer checking.",
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "check": "node --check server.js"
+    "check": "node --check server.js && node --check src/ai-client.js && node --check src/question-service.js && node --check src/check-service.js && node --check src/mept-format.js"
   },
   "dependencies": {
     "dotenv": "latest",
     "express": "latest"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18.17"
   }
 }
