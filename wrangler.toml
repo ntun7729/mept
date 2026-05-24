@@ -1,7 +1,12 @@
 name = "mept"
+main = "worker.js"
 compatibility_date = "2025-05-24"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = "public"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
 
 [vars]
 NODE_ENV = "production"
