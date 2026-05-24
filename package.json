@@ -8,7 +8,7 @@
     "dev": "node server.js",
     "dev:debug": "LOG_LEVEL=debug node server.js",
     "start": "node server.js",
-    "check": "node --check server.js && node --check src/ai-client.js && node --check src/question-service.js && node --check src/check-service.js && node --check src/mept-format.js && node --check src/logger.js && node --check src/runtime-env.js && node --check 'functions/api/[[path]].js'",
+    "check": "node --check server.js && node --check src/ai-client.js && node --check src/question-service.js && node --check src/check-service.js && node --check src/mept-format.js && node --check src/logger.js && node --check src/runtime-env.js && node --check \"functions/api/[[path]].js\"",
     "pages:dev": "wrangler pages dev public --compatibility-date=2025-05-24 --compatibility-flag=nodejs_compat",
     "deploy": "wrangler pages deploy public --project-name=mept --compatibility-date=2025-05-24 --compatibility-flag=nodejs_compat"
   },
